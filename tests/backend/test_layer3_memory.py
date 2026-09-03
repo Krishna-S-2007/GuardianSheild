@@ -127,3 +127,55 @@ def test_context_construction():
     assert ctx["new_telemetry"]["transcript_delta"] == "Confirm your UPI PIN immediately."
     assert ctx["new_telemetry"]["deepfake_score"] == 0.85
     assert ctx["new_telemetry"]["is_critical"] is True
+
+
+def test_long_running_call_memory_stress_bounded():
+    """Simulates 500 continuous telemetry events in a long call."""
+    mem = CallMemory(session_id="CALL-STRESS-500", max_recent_events=8)
+
+    for i in range(1, 501):
+        event = TelemetryEvent(
+            transcript_delta=f"Packet {i}: Continuous streaming dialogue sentence.",
+            deepfake_score=min(1.0, 0.002 * i),
+            speaker_id="caller",
+        )
+        mem.add_telemetry_event(event)
+
+    # Memory buffer MUST remain bounded at exactly 8 items
+    assert len(mem.recent_events) == 8
+    assert mem.event_counter == 500
+
+    # Verify latest items are 493 to 500
+    first_seq = mem.recent_events[0]["event_seq"]
+    last_seq = mem.recent_events[-1]["event_seq"]
+    assert first_seq == 493
+    assert last_seq == 500
+
+    # Serialization must produce compact dictionary without unbounded inflation
+    mem_dict = mem.to_dict()
+    assert len(mem_dict["recent_events"]) == 8
+    assert mem_dict["total_events_processed"] == 500
+
+
+def test_edge_case_telemetry_clamping_and_unicode():
+    """Validates graceful handling of empty strings, unicode emojis, and score clamping."""
+    mem = CallMemory(session_id="CALL-EDGE")
+
+    # Unicode / regional script (e.g. Hindi / Tamil / emojis)
+    unicode_evt = TelemetryEvent(
+        transcript_delta="⚠️ कृपया अपना OTP साझा न करें! உங்கள் கடவுச்சொல்லை பகிர வேண்டாம்.",
+        deepfake_score=1.5,  # Out of range, should be handled
+    )
+    mem.add_telemetry_event(unicode_evt)
+    assert len(mem.recent_events) == 1
+    assert "OTP" in mem.recent_events[0]["transcript_delta"]
+
+    # Security state update with out-of-bound risk score
+    out_of_bound_state = SecurityState(
+        current_state="ISOLATION",
+        risk_score=2.5,  # Needs clamping to 1.0
+        running_summary="Scam detected.",
+    )
+    mem.update_from_security_state(out_of_bound_state)
+    assert mem.risk_score == 1.0
+
