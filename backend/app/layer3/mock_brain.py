@@ -35,15 +35,23 @@ def mock_reasoning_engine(context: Dict[str, Any]) -> SecurityState:
         active_claim = "Caller claims high-level executive / law-enforcement authority."
         summary_additions.append("Caller established high-authority persona.")
 
-    # 2. Urgency & Secrecy triggers
-    if any(k in transcript for k in ["urgent", "immediately", "secret", "don't tell", "confidential", "disconnect"]):
+    # 2. Fear, Threat & Digital Arrest triggers
+    if any(k in transcript for k in ["arrest", "digital arrest", "jailed", "narcotics", "court", "crime"]):
+        state = "FEAR_INDUCTION" if state in ["NORMAL", "AUTHORITY_IMPERSONATION"] else state
+        risk = max(risk, 0.60)
+        signals["fear"] = 0.90
+        signals["threat"] = 0.85
+        summary_additions.append("Caller induced fear of arrest or criminal prosecution.")
+
+    # 3. Urgency & Secrecy triggers
+    if any(k in transcript for k in ["urgent", "immediately", "secret", "don't tell", "dont tell", "do not tell", "confidential", "disconnect"]):
         state = "URGENCY" if state in ["NORMAL", "AUTHORITY_IMPERSONATION"] else state
         risk = max(risk, 0.65)
         signals["urgency"] = 0.90
         signals["isolation"] = 0.80
         summary_additions.append("Caller applied urgency and requested secrecy/isolation.")
 
-    # 3. Credential & Financial Extraction triggers
+    # 4. Credential & Financial Extraction triggers
     if any(k in transcript for k in ["otp", "pin", "password", "transfer", "upi", "account compromised", "wire"]):
         signals["credential_request"] = 0.95
         signals["financial_pressure"] = 0.90
