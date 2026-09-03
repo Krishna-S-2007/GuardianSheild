@@ -1,0 +1,27 @@
+# Obsidian
+.obsidian/
+
+# Android & Gradle
+.gradle/
+build/
+app/build/
+*.apk
+*.aab
+local.properties
+.idea/
+*.iml
+
+# Python & Backend
+__pycache__/
+*.py[cod]
+*$py.class
+*.env
+.venv/
+venv/
+ENV/
+.pytest_cache/
+
+# OS & IDE
+.DS_Store
+Thumbs.db
+.vscode/
