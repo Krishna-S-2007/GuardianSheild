@@ -31,6 +31,8 @@ interface SignalingEvents {
     fun onAnswerReceived(sdp: String, sessionId: String)
     fun onIceCandidateReceived(sdpMid: String?, sdpMLineIndex: Int, candidate: String)
     fun onCallEnded(sessionId: String)
+    fun onStateUpdate(sessionId: String, payload: JsonObject)
+    fun onVerificationUpdate(sessionId: String, payload: JsonObject)
     fun onError(message: String)
 }
 
@@ -152,6 +154,14 @@ class SignalingClient(
                 "call_end" -> {
                     events.onCallEnded(sessionId)
                 }
+                "state_update" -> {
+                    val payload = json.getAsJsonObject("payload") ?: JsonObject()
+                    events.onStateUpdate(sessionId, payload)
+                }
+                "verification_update" -> {
+                    val payload = json.getAsJsonObject("payload") ?: JsonObject()
+                    events.onVerificationUpdate(sessionId, payload)
+                }
                 "error" -> {
                     val errMsg = json.getAsJsonObject("payload")?.get("error")?.asString ?: "Unknown signaling error"
                     events.onError(errMsg)
@@ -238,6 +248,45 @@ class SignalingClient(
             addProperty("sender_device_id", myDeviceId)
             addProperty("target_device_id", targetDeviceId)
             addProperty("session_id", sessionId)
+        }
+        sendMessage(msg)
+    }
+
+    fun sendTelemetry(
+        sessionId: String,
+        transcriptDelta: String,
+        deepfakeScore: Float,
+        isCritical: Boolean = false
+    ) {
+        val payload = JsonObject().apply {
+            addProperty("transcript_delta", transcriptDelta)
+            addProperty("deepfake_score", deepfakeScore)
+            addProperty("is_critical", isCritical)
+            addProperty("speaker_id", myDeviceId)
+        }
+        val msg = JsonObject().apply {
+            addProperty("type", "telemetry")
+            addProperty("sender_device_id", myDeviceId)
+            addProperty("session_id", sessionId)
+            add("payload", payload)
+        }
+        sendMessage(msg)
+    }
+
+    fun submitVerificationResponse(
+        sessionId: String,
+        confirmed: Boolean,
+        responseNote: String = ""
+    ) {
+        val payload = JsonObject().apply {
+            addProperty("confirmed", confirmed)
+            addProperty("response_note", responseNote)
+        }
+        val msg = JsonObject().apply {
+            addProperty("type", "verification_response")
+            addProperty("sender_device_id", myDeviceId)
+            addProperty("session_id", sessionId)
+            add("payload", payload)
         }
         sendMessage(msg)
     }

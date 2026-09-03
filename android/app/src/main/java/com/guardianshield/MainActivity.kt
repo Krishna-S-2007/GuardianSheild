@@ -34,6 +34,12 @@ class MainActivity : ComponentActivity(), SignalingEvents, WebRTCCallback {
     private val activeRemotePeerState = mutableStateOf("")
     private val incomingCallerState = mutableStateOf<String?>(null)
     private var currentSessionId: String = ""
+    private val riskScoreState = mutableStateOf(0.0f)
+    private val attackStateState = mutableStateOf("NORMAL")
+    private val activeClaimState = mutableStateOf<String?>(null)
+    private val actionRequiredState = mutableStateOf<String?>(null)
+    private val verificationStatusState = mutableStateOf<String?>(null)
+    private val verificationMessageState = mutableStateOf<String?>(null)
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -63,7 +69,21 @@ class MainActivity : ComponentActivity(), SignalingEvents, WebRTCCallback {
                 CallScreen(
                     remotePeerId = activeRemotePeerState.value,
                     pcmBuffer = webRTCManager.pcmBuffer,
-                    onEndCall = { hangupCall() }
+                    riskScore = riskScoreState.value,
+                    attackState = attackStateState.value,
+                    activeClaim = activeClaimState.value,
+                    actionRequired = actionRequiredState.value,
+                    verificationStatus = verificationStatusState.value,
+                    verificationMessage = verificationMessageState.value,
+                    onEndCall = { hangupCall() },
+                    onSimulateThreat = {
+                        signalingClient.sendTelemetry(
+                            sessionId = currentSessionId,
+                            transcriptDelta = "This is CBI officer Sharma. Your bank accounts are under digital arrest. Transfer funds to safe escrow now.",
+                            deepfakeScore = 0.88f,
+                            isCritical = true
+                        )
+                    }
                 )
             } else {
                 MainScreen(
@@ -139,6 +159,13 @@ class MainActivity : ComponentActivity(), SignalingEvents, WebRTCCallback {
             isCallActiveState.value = false
             activeRemotePeerState.value = ""
             incomingCallerState.value = null
+            currentSessionId = ""
+            riskScoreState.value = 0.0f
+            attackStateState.value = "NORMAL"
+            activeClaimState.value = null
+            actionRequiredState.value = null
+            verificationStatusState.value = null
+            verificationMessageState.value = null
             webRTCManager.closePeerConnection()
         }
     }
@@ -236,6 +263,22 @@ class MainActivity : ComponentActivity(), SignalingEvents, WebRTCCallback {
         runOnUiThread {
             Toast.makeText(this, "Call ended by peer", Toast.LENGTH_SHORT).show()
             cleanupCall()
+        }
+    }
+
+    override fun onStateUpdate(sessionId: String, payload: com.google.gson.JsonObject) {
+        runOnUiThread {
+            riskScoreState.value = payload.get("risk_score")?.asFloat ?: 0.0f
+            attackStateState.value = payload.get("current_state")?.asString ?: "NORMAL"
+            activeClaimState.value = payload.get("active_claim")?.let { if (it.isJsonNull) null else it.asString }
+            actionRequiredState.value = payload.get("action_required")?.let { if (it.isJsonNull) null else it.asString }
+        }
+    }
+
+    override fun onVerificationUpdate(sessionId: String, payload: com.google.gson.JsonObject) {
+        runOnUiThread {
+            verificationStatusState.value = payload.get("status")?.let { if (it.isJsonNull) null else it.asString }
+            verificationMessageState.value = payload.get("message")?.let { if (it.isJsonNull) null else it.asString }
         }
     }
 
