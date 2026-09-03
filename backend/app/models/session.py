@@ -37,6 +37,7 @@ class SignalingType(str, Enum):
     CALL_END = "call_end"
     STATE_UPDATE = "state_update"
     VERIFICATION_UPDATE = "verification_update"
+    TELEMETRY = "telemetry"
     PING = "ping"
     PONG = "pong"
     ERROR = "error"

@@ -127,3 +127,88 @@ def test_websocket_signaling_flow():
 
             end_received = ws_victim.receive_json()
             assert end_received["type"] == SignalingType.CALL_END.value
+
+
+def test_telemetry_websocket_streaming():
+    client = TestClient(app)
+
+    with client.websocket_connect("/ws/device/CALLER-STREAM") as ws_caller:
+        ws_caller.receive_json()  # REGISTERED
+
+        with client.websocket_connect("/ws/device/VICTIM-STREAM") as ws_victim:
+            ws_victim.receive_json()  # REGISTERED
+
+            # 1. Establish call
+            init_msg = {
+                "type": SignalingType.CALL_INITIATE.value,
+                "sender_device_id": "CALLER-STREAM",
+                "target_device_id": "VICTIM-STREAM",
+                "session_id": "CALL-WS-STREAM-01"
+            }
+            ws_caller.send_json(init_msg)
+            inc = ws_victim.receive_json()
+            session_id = inc["session_id"]
+
+            accept_msg = {
+                "type": SignalingType.CALL_ACCEPT.value,
+                "sender_device_id": "VICTIM-STREAM",
+                "target_device_id": "CALLER-STREAM",
+                "session_id": session_id
+            }
+            ws_victim.send_json(accept_msg)
+            ws_caller.receive_json()  # ACCEPT
+
+            # 2. Stream telemetry over WebSocket
+            tel_msg = {
+                "type": SignalingType.TELEMETRY.value,
+                "sender_device_id": "CALLER-STREAM",
+                "session_id": session_id,
+                "payload": {
+                    "transcript_delta": "This is bank security. Send the OTP now.",
+                    "deepfake_score": 0.89,
+                    "is_critical": True
+                }
+            }
+            ws_caller.send_json(tel_msg)
+
+            # Both victim and caller receive real-time STATE_UPDATE
+            state_victim = ws_victim.receive_json()
+            assert state_victim["type"] == SignalingType.STATE_UPDATE.value
+            assert state_victim["payload"]["risk_score"] > 0.7
+            assert state_victim["payload"]["action_required"] is not None
+
+
+@pytest.mark.asyncio
+async def test_telemetry_rest_ingestion():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        # 1. Register device
+        await ac.post(
+            "/api/signaling/register",
+            json={"device_id": "REST-DEV-CALLEE", "user_name": "Executive Target"}
+        )
+        await ac.post(
+            "/api/signaling/register",
+            json={"device_id": "REST-DEV-CALLER", "user_name": "Unknown Caller"}
+        )
+
+        # 2. Ingest telemetry for a session
+        tel_req = {
+            "session_id": "CALL-REST-INGEST-01",
+            "transcript_delta": "I am the CFO, transfer the funds immediately.",
+            "deepfake_score": 0.82,
+            "is_critical": True
+        }
+        # Create session directly in session_service
+        from app.services.session_service import session_service
+        await session_service.create_session(
+            caller_device_id="REST-DEV-CALLER",
+            callee_device_id="REST-DEV-CALLEE",
+            custom_session_id="CALL-REST-INGEST-01"
+        )
+
+        # Ingest telemetry
+        res = await ac.post("/api/signaling/telemetry", json=tel_req)
+        assert res.status_code == 200
+        data = res.json()["data"]
+        assert data["risk_score"] > 0.6
+        assert data["current_state"] in ["ISOLATION", "SUSPICIOUS", "URGENCY", "AUTHORITY_IMPERSONATION", "BLOCKED"]

@@ -14,6 +14,8 @@ from app.models.session import (
 from app.models.responses import BaseResponse
 from app.websocket.connection_manager import manager
 from app.services.session_service import session_service
+from app.layer3.schemas import TelemetryEvent, UserContext, TrustedContact as Layer3TrustedContact
+from app.layer3.service import process_telemetry
 
 logger = logging.getLogger("guardianshield.signaling")
 router = APIRouter()
@@ -163,9 +165,78 @@ async def hangup_call_rest(req: CallActionRequest):
         "target_device_id": peer_device_id,
         "session_id": req.session_id
     }
-    await manager.send_personal_message(msg, peer_device_id)
-
     return BaseResponse(message="Call ended successfully.")
+
+
+class TelemetryIngestRequest(BaseModel):
+    session_id: str
+    transcript_delta: str
+    deepfake_score: float = 0.0
+    speaker_id: Optional[str] = None
+    is_critical: bool = False
+    acoustic_signals: Optional[dict] = None
+
+
+@router.post("/signaling/telemetry", response_model=BaseResponse, tags=["Telemetry"])
+async def ingest_telemetry_rest(req: TelemetryIngestRequest):
+    """
+    Ingests live telemetry from Layer 1/2, runs Layer 3 reasoning & memory update,
+    and broadcasts state_update to active devices in the call.
+    """
+    session = await session_service.get_session(req.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail=f"Session {req.session_id} not found")
+
+    # Fetch device user context if registered
+    callee_profile = await session_service.get_device(session.callee_device_id)
+    user_ctx = None
+    if callee_profile:
+        user_ctx = UserContext(
+            user_id=callee_profile.user_id or callee_profile.device_id,
+            user_name=callee_profile.user_name,
+            trusted_contacts=[
+                Layer3TrustedContact(
+                    name=c.name,
+                    relationship=c.relationship,
+                    device_id=c.device_id,
+                    phone_number=c.phone_number
+                )
+                for c in callee_profile.trusted_contacts
+            ]
+        )
+
+    tel_event = TelemetryEvent(
+        transcript_delta=req.transcript_delta,
+        deepfake_score=req.deepfake_score,
+        speaker_id=req.speaker_id,
+        is_critical=req.is_critical,
+        acoustic_signals=req.acoustic_signals or {}
+    )
+
+    security_state = await process_telemetry(req.session_id, tel_event, user_ctx)
+
+    # Broadcast STATE_UPDATE event to callee and caller
+    state_msg = {
+        "type": SignalingType.STATE_UPDATE.value,
+        "sender_device_id": "layer3_engine",
+        "session_id": req.session_id,
+        "payload": {
+            "current_state": security_state.current_state,
+            "risk_score": security_state.risk_score,
+            "running_summary": security_state.running_summary,
+            "active_claim": security_state.active_claim,
+            "signals": security_state.signals,
+            "action_required": security_state.action_required,
+            "explanation": security_state.explanation,
+        }
+    }
+    await manager.send_personal_message(state_msg, session.callee_device_id)
+    await manager.send_personal_message(state_msg, session.caller_device_id)
+
+    return BaseResponse(
+        message="Telemetry processed successfully.",
+        data=security_state.model_dump()
+    )
 
 
 # --- WebSocket Signaling Endpoint ---
@@ -252,6 +323,54 @@ async def websocket_signaling_endpoint(websocket: WebSocket, device_id: str):
                         relayed = await manager.send_personal_message(data, target_id)
                         if not relayed:
                             logger.warning(f"Failed to relay {msg_type} to {target_id} (offline)")
+
+                elif msg_type == SignalingType.TELEMETRY.value:
+                    if session_id:
+                        sess = await session_service.get_session(session_id)
+                        callee_prof = await session_service.get_device(sess.callee_device_id) if sess else None
+                        u_ctx = None
+                        if callee_prof:
+                            u_ctx = UserContext(
+                                user_id=callee_prof.user_id or callee_prof.device_id,
+                                user_name=callee_prof.user_name,
+                                trusted_contacts=[
+                                    Layer3TrustedContact(
+                                        name=c.name,
+                                        relationship=c.relationship,
+                                        device_id=c.device_id,
+                                        phone_number=c.phone_number
+                                    )
+                                    for c in callee_prof.trusted_contacts
+                                ]
+                            )
+                        tel_payload = data.get("payload", {})
+                        tel_evt = TelemetryEvent(
+                            transcript_delta=tel_payload.get("transcript_delta", data.get("transcript_delta", "")),
+                            deepfake_score=float(tel_payload.get("deepfake_score", data.get("deepfake_score", 0.0))),
+                            speaker_id=tel_payload.get("speaker_id", device_id),
+                            is_critical=bool(tel_payload.get("is_critical", data.get("is_critical", False))),
+                            acoustic_signals=tel_payload.get("acoustic_signals", {})
+                        )
+                        sec_state = await process_telemetry(session_id, tel_evt, u_ctx)
+                        state_update_msg = {
+                            "type": SignalingType.STATE_UPDATE.value,
+                            "sender_device_id": "layer3_engine",
+                            "session_id": session_id,
+                            "payload": {
+                                "current_state": sec_state.current_state,
+                                "risk_score": sec_state.risk_score,
+                                "running_summary": sec_state.running_summary,
+                                "active_claim": sec_state.active_claim,
+                                "signals": sec_state.signals,
+                                "action_required": sec_state.action_required,
+                                "explanation": sec_state.explanation,
+                            }
+                        }
+                        if sess:
+                            await manager.send_personal_message(state_update_msg, sess.callee_device_id)
+                            await manager.send_personal_message(state_update_msg, sess.caller_device_id)
+                        else:
+                            await manager.send_personal_message(state_update_msg, device_id)
 
                 elif msg_type == SignalingType.CALL_END.value:
                     if session_id:
