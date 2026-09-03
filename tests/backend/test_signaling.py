@@ -1,6 +1,6 @@
 import pytest
 from httpx import AsyncClient, ASGITransport
-from starlette.testclient import TestClient
+from fastapi.testclient import TestClient
 from app.main import app
 from app.models.session import SignalingType
 
