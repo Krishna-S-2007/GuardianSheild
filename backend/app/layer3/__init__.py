@@ -1,13 +1,13 @@
 """GuardianShield Layer 3 - Context Memory, Session State, and Reasoning Integration.
 
-Person B responsibility: memory machinery, session lifecycle, context construction,
-and Layer 3 service wrapper for Member 4's backend integration.
+Harmonized exports for Person A (Reasoning Engine) and Person B (Context Memory Machinery).
 """
 
 from .schemas import (
     UserContext,
     TrustedContact,
     TelemetryEvent,
+    SecuritySignals,
     SecurityState,
     ReasoningContext,
 )
@@ -22,13 +22,20 @@ from .service import (
     default_layer3_service,
 )
 from .mock_brain import mock_reasoning_engine
-from .brain import GeminiBrain, evaluate_reasoning, gemini_brain
+from .brain import (
+    Layer3Brain,
+    GeminiBrain,
+    evaluate_reasoning,
+    gemini_brain,
+)
+from .reasoning import Layer3Reasoner
 
 __all__ = [
     # Schemas
     "UserContext",
     "TrustedContact",
     "TelemetryEvent",
+    "SecuritySignals",
     "SecurityState",
     "ReasoningContext",
     # Memory
@@ -44,7 +51,9 @@ __all__ = [
     "end_session",
     "layer3_session_stats",
     "default_layer3_service",
-    # Brain
+    # Brain & Reasoning (Person A + Person B)
+    "Layer3Brain",
+    "Layer3Reasoner",
     "GeminiBrain",
     "evaluate_reasoning",
     "gemini_brain",

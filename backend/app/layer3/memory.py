@@ -50,21 +50,42 @@ class CallMemory:
         self.deepfake_score_history.append(event.deepfake_score)
         self.updated_at = time.time()
 
-    def update_from_security_state(self, state: SecurityState) -> None:
+    def update_from_security_state(self, state: Any) -> None:
         """Updates internal state and running summary from reasoning output."""
-        if state.current_state:
-            self.current_state = state.current_state
-        self.risk_score = max(0.0, min(1.0, float(state.risk_score)))
+        # Support both current_state and attack_state
+        state_val = getattr(state, "current_state", None) or getattr(state, "attack_state", None)
+        if hasattr(state_val, "value"):
+            state_val = state_val.value
+        if state_val:
+            self.current_state = str(state_val)
+
+        # Support both risk_score and risk
+        risk = getattr(state, "risk_score", None)
+        if risk is None:
+            risk = getattr(state, "risk", 0.0)
+        self.risk_score = max(0.0, min(1.0, float(risk)))
         
-        # Only overwrite running summary if a non-empty summary is returned
-        if state.running_summary and state.running_summary.strip():
-            self.running_summary = state.running_summary.strip()
+        # Only overwrite running summary if a non-empty summary or reasoning is returned
+        summary = getattr(state, "running_summary", None)
+        if summary and str(summary).strip():
+            self.running_summary = str(summary).strip()
+        elif getattr(state, "reasoning", None) and str(state.reasoning).strip() and state.reasoning != "Call initiated.":
+            self.running_summary = str(state.reasoning).strip()
         
-        if state.active_claim is not None:
+        if getattr(state, "active_claim", None) is not None:
             self.active_claim = state.active_claim
             
-        if state.signals:
-            self.signals.update(state.signals)
+        signals = getattr(state, "signals", None)
+        if signals:
+            if hasattr(signals, "model_fields_set") and signals.model_fields_set:
+                for k in signals.model_fields_set:
+                    val = getattr(signals, k)
+                    if val is not None:
+                        self.signals[k] = float(val)
+            elif isinstance(signals, dict):
+                for k, v in signals.items():
+                    if v is not None:
+                        self.signals[k] = float(v)
             
         self.updated_at = time.time()
 

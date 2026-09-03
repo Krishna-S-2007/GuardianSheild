@@ -227,7 +227,7 @@ async def ingest_telemetry_rest(req: TelemetryIngestRequest):
             "risk_score": security_state.risk_score,
             "running_summary": security_state.running_summary,
             "active_claim": security_state.active_claim,
-            "signals": security_state.signals,
+            "signals": security_state.signals.model_dump() if hasattr(security_state.signals, "model_dump") else dict(security_state.signals),
             "action_required": security_state.action_required,
             "explanation": security_state.explanation,
         }
@@ -405,7 +405,7 @@ async def websocket_signaling_endpoint(websocket: WebSocket, device_id: str):
                                 "risk_score": sec_state.risk_score,
                                 "running_summary": sec_state.running_summary,
                                 "active_claim": sec_state.active_claim,
-                                "signals": sec_state.signals,
+                                "signals": sec_state.signals.model_dump() if hasattr(sec_state.signals, "model_dump") else dict(sec_state.signals),
                                 "action_required": sec_state.action_required,
                                 "explanation": sec_state.explanation,
                             }
