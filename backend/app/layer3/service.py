@@ -129,6 +129,31 @@ class Layer3Service:
 
         return new_state
 
+    async def end_session(
+        self,
+        session_id: str,
+    ) -> bool:
+        """
+        Terminates the Layer 3 call memory for a session.
+        Per MD spec: session lifecycle requires explicit end_session().
+        Returns True if session was found and ended, False if already gone.
+        """
+        memory = self.memory_manager.end_session(session_id)
+        if memory:
+            logger.info(
+                f"[Layer 3] Session {session_id} ended. "
+                f"Total events processed: {memory.event_counter}, "
+                f"final risk: {memory.risk_score:.2f}, "
+                f"final state: {memory.current_state}"
+            )
+            return True
+        logger.debug(f"[Layer 3] end_session called on unknown session: {session_id}")
+        return False
+
+    def session_stats(self) -> dict:
+        """Returns active session statistics for observability."""
+        return self.memory_manager.session_stats()
+
 
 # Global singleton instance
 default_layer3_service = Layer3Service()
@@ -141,3 +166,13 @@ async def process_telemetry(
 ) -> SecurityState:
     """Convenience functional wrapper for backend integration."""
     return await default_layer3_service.process_telemetry(session_id, telemetry, user_context)
+
+
+async def end_session(session_id: str) -> bool:
+    """Functional wrapper: ends a Layer 3 session and purges its call memory."""
+    return await default_layer3_service.end_session(session_id)
+
+
+def layer3_session_stats() -> dict:
+    """Functional wrapper: returns current Layer 3 session statistics."""
+    return default_layer3_service.session_stats()

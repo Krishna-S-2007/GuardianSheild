@@ -82,3 +82,43 @@ class CallMemory:
             "total_events_processed": self.event_counter,
             "duration_seconds": round(time.time() - self.created_at, 1),
         }
+
+    def get_summary_dict(self) -> Dict[str, Any]:
+        """Returns a compact health summary for monitoring (no event payloads)."""
+        avg_deepfake = (
+            round(sum(self.deepfake_score_history) / len(self.deepfake_score_history), 3)
+            if self.deepfake_score_history
+            else 0.0
+        )
+        return {
+            "session_id": self.session_id,
+            "current_state": self.current_state,
+            "risk_score": round(self.risk_score, 3),
+            "active_claim": self.active_claim,
+            "total_events": self.event_counter,
+            "avg_deepfake_score": avg_deepfake,
+            "duration_seconds": round(time.time() - self.created_at, 1),
+        }
+
+    def clear(self) -> None:
+        """
+        Resets call memory to initial state.
+        Called when a session ends to free accumulated context.
+        Does NOT reset session_id or event_counter (preserved for audit).
+        """
+        self.current_state = "NORMAL"
+        self.risk_score = 0.0
+        self.running_summary = "Session cleared."
+        self.active_claim = None
+        self.signals = {
+            "authority": 0.0,
+            "fear": 0.0,
+            "urgency": 0.0,
+            "isolation": 0.0,
+            "financial_pressure": 0.0,
+            "credential_request": 0.0,
+            "threat": 0.0,
+        }
+        self.recent_events.clear()
+        self.deepfake_score_history.clear()
+        self.updated_at = time.time()
