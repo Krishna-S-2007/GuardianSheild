@@ -6,7 +6,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.api.health import router as health_router
 from app.api.signaling import router as signaling_router
-from app.api.telemetry import router as telemetry_router
 
 # Configure logging
 logging.basicConfig(
@@ -18,15 +17,15 @@ logger = logging.getLogger("guardianshield.main")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info(f"GuardianShield Backend started on port {settings.PORT}.")
+    logger.info(f"GuardianShield WebRTC Signaling Backend started on port {settings.PORT}.")
     yield
-    logger.info("GuardianShield Backend shutting down.")
+    logger.info("GuardianShield WebRTC Signaling Backend shutting down.")
 
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
-    description="Real-Time WebRTC Signaling, Session Memory & Layer 3 Brain for GuardianShield",
+    description="Real-Time WebRTC Signaling & Call Coordination Backend for GuardianShield",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan
@@ -41,10 +40,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include Routers
+# Include Routers for WebRTC Signaling & Health
 app.include_router(health_router, prefix=settings.API_V1_STR)
 app.include_router(signaling_router, prefix=settings.API_V1_STR)
-app.include_router(telemetry_router, prefix=settings.API_V1_STR)
 
 # Mount WebSocket directly at root level as well
 app.include_router(signaling_router)

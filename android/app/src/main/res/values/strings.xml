@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GuardianShield</string>
+    <string name="status_connected">Connected</string>
+    <string name="status_connecting">Connecting…</string>
+    <string name="status_disconnected">Disconnected</string>
+    <string name="call_idle">Idle</string>
+    <string name="call_ringing">Ringing…</string>
+    <string name="call_active">Call Active</string>
+    <string name="start_call">Start Call</string>
+    <string name="end_call">End Call</string>
+    <string name="accept_call">Accept</string>
+    <string name="reject_call">Reject</string>
+    <string name="incoming_call_title">Incoming GuardianShield Call</string>
+    <string name="server_url_hint">Backend IP (e.g., 192.168.1.50:8000)</string>
+    <string name="target_device_hint">Target Device ID (e.g., GS-BOB)</string>
+</resources>

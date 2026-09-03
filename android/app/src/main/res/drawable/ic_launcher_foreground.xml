@@ -1,0 +1,10 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- GuardianShield Logo: Shield Icon -->
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M54,18 L30,28 L30,52 C30,67.5 40.2,81.8 54,86 C67.8,81.8 78,67.5 78,52 L78,28 L54,18 Z M54,42 C57.3,42 60,44.7 60,48 C60,50.3 58.7,52.3 56.8,53.3 L58,66 L50,66 L51.2,53.3 C49.3,52.3 48,50.3 48,48 C48,44.7 50.7,42 54,42 Z" />
+</vector>
