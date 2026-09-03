@@ -16,6 +16,8 @@ from app.websocket.connection_manager import manager
 from app.services.session_service import session_service
 from app.layer3.schemas import TelemetryEvent, UserContext, TrustedContact as Layer3TrustedContact
 from app.layer3.service import process_telemetry
+from app.layer4.schemas import VerificationResponse
+from app.layer4.verification_service import verification_service
 
 logger = logging.getLogger("guardianshield.signaling")
 router = APIRouter()
@@ -233,9 +235,51 @@ async def ingest_telemetry_rest(req: TelemetryIngestRequest):
     await manager.send_personal_message(state_msg, session.callee_device_id)
     await manager.send_personal_message(state_msg, session.caller_device_id)
 
+    # --- Layer 4: Dispatch automated intervention if action_required ---
+    if security_state.action_required:
+        await verification_service.dispatch_action(
+            session_id=req.session_id,
+            security_state=security_state,
+            victim_device_id=session.callee_device_id,
+            user_context=user_ctx,
+        )
+
     return BaseResponse(
         message="Telemetry processed successfully.",
         data=security_state.model_dump()
+    )
+
+
+@router.post("/signaling/verify", response_model=BaseResponse, tags=["Layer4"])
+async def submit_verification_response(resp: VerificationResponse):
+    """
+    Trusted contact submits verification response to confirm or deny the active claim.
+    Outcome is pushed to the victim device via WebSocket.
+    """
+    record = await verification_service.record_response(resp)
+    if not record:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No active verification challenge found for session {resp.session_id}"
+        )
+    return BaseResponse(
+        message=f"Verification response recorded: {record.status.value}",
+        data=record.model_dump()
+    )
+
+
+@router.get("/signaling/verify/{session_id}", response_model=BaseResponse, tags=["Layer4"])
+async def get_verification_status(session_id: str):
+    """Returns the current verification record for a session."""
+    record = await verification_service.get_record(session_id)
+    if not record:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No verification record for session {session_id}"
+        )
+    return BaseResponse(
+        message=f"Verification status: {record.status.value}",
+        data=record.model_dump()
     )
 
 
@@ -369,6 +413,14 @@ async def websocket_signaling_endpoint(websocket: WebSocket, device_id: str):
                         if sess:
                             await manager.send_personal_message(state_update_msg, sess.callee_device_id)
                             await manager.send_personal_message(state_update_msg, sess.caller_device_id)
+                            # --- Layer 4: Dispatch automated intervention ---
+                            if sec_state.action_required:
+                                await verification_service.dispatch_action(
+                                    session_id=session_id,
+                                    security_state=sec_state,
+                                    victim_device_id=sess.callee_device_id,
+                                    user_context=u_ctx,
+                                )
                         else:
                             await manager.send_personal_message(state_update_msg, device_id)
 
