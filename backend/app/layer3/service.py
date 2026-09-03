@@ -9,6 +9,7 @@ from .schemas import UserContext, TelemetryEvent, SecurityState
 from .session import SessionManager, session_manager
 from .context import build_reasoning_context
 from .mock_brain import mock_reasoning_engine
+from .brain import evaluate_reasoning
 from app.services.session_service import session_service, SessionService
 from app.models.session import AttackState
 
@@ -29,7 +30,7 @@ class Layer3Service:
     ):
         self.memory_manager = memory_manager or session_manager
         self.backend_session_service = backend_session_service or session_service
-        self.reasoning_engine = reasoning_engine or mock_reasoning_engine
+        self.reasoning_engine = reasoning_engine or evaluate_reasoning
 
     def set_reasoning_engine(self, engine_fn: Callable[[Dict[str, Any]], SecurityState]) -> None:
         """Allows injecting Person A's real Gemini reasoning engine."""
